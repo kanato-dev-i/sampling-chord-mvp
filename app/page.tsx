@@ -19,6 +19,16 @@ type VideoMeta = {
 type OutputMode = "chords" | "midi";
 type AnalysisStatus = "idle" | "analyzing" | "success" | "failed";
 
+type AnalyzeYoutubeApiResponse = {
+  source: "youtube";
+  url: string;
+  chords: {
+    time: number;
+    chord: string;
+  }[];
+  midiUrl: string | null;
+};
+
 type SelectedChordMemo = {
   sectionLabel: string;
   chord: string;
@@ -183,13 +193,38 @@ function pickDemoResult(fileName: string): AnalysisResult {
 }
 
 async function analyzeYoutubeUrl(url: string, outputType: OutputMode): Promise<AnalysisResult> {
-  // Future replacement point: POST { url, outputType } to /api/analyze-youtube.
-  // const response = await fetch("/api/analyze-youtube", { method: "POST", body: JSON.stringify({ url, outputType }) });
-  await new Promise((resolve) => setTimeout(resolve, 720));
-
   if (!extractYouTubeVideoId(url)) {
     throw new Error("Invalid YouTube URL");
   }
+
+  try {
+    const response = await fetch("/api/analyze-youtube", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ url, outputType }),
+    });
+
+    if (response.ok) {
+      const data = (await response.json()) as AnalyzeYoutubeApiResponse;
+
+      return {
+        key: "C major",
+        bpm: outputType === "midi" ? 100 : 96,
+        sections: [
+          {
+            label: "YouTube analysis",
+            chords: data.chords.map((item) => item.chord),
+          },
+        ],
+      };
+    }
+  } catch {
+    // GitHub Pages has no runtime API. Keep the MVP usable with a local mock.
+  }
+
+  await new Promise((resolve) => setTimeout(resolve, 720));
 
   return {
     key: "C major",
