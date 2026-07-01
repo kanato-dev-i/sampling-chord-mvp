@@ -588,29 +588,22 @@ export default function Home() {
                 ))}
               </div>
 
-              <div className="parallel-note">
-                <div className="lyrics-column" aria-label="歌詞メモ">
-                  <h3>歌詞メモ</h3>
-                  {lyricSketch.map((section) => (
-                    <div className="lyric-block" key={section.label}>
-                      <span>{section.label}</span>
-                      {section.lines.map((line) => (
-                        <p key={line}>{line}</p>
-                      ))}
+              <div className="chord-board" aria-label="コード進行">
+                <div className="board-heading">
+                  <h3>コード進行ノート</h3>
+                  <p>時間順のコードを見て、気になる小節を選択できます。</p>
+                </div>
+
+                <div className="timeline-list" aria-label="時間付きコードリスト">
+                  {analysis.timeline.map((item) => (
+                    <div className="timeline-item" key={`${item.time}-${item.chord}`}>
+                      <span>{item.time}s</span>
+                      <strong>{item.chord}</strong>
                     </div>
                   ))}
                 </div>
 
-                <div className="section-list" aria-label="コード進行">
-                  <h3>コード進行</h3>
-                  <div className="timeline-list" aria-label="時間付きコードリスト">
-                    {analysis.timeline.map((item) => (
-                      <div className="timeline-item" key={`${item.time}-${item.chord}`}>
-                        <span>{item.time}s</span>
-                        <strong>{item.chord}</strong>
-                      </div>
-                    ))}
-                  </div>
+                <div className="section-list" aria-label="コードカード">
                   {analysis.sections.map((section) => (
                     <div className="chord-section" key={section.label}>
                       <h3>{section.label}</h3>
@@ -628,6 +621,20 @@ export default function Home() {
                           </button>
                         ))}
                       </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="lyrics-column" aria-label="歌詞メモ">
+                <h3>歌詞メモ</h3>
+                <div className="lyrics-grid">
+                  {lyricSketch.map((section) => (
+                    <div className="lyric-block" key={section.label}>
+                      <span>{section.label}</span>
+                      {section.lines.map((line) => (
+                        <p key={line}>{line}</p>
+                      ))}
                     </div>
                   ))}
                 </div>
