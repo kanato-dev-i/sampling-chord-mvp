@@ -18,6 +18,16 @@ type VideoMeta = {
 
 type OutputMode = "chords" | "midi";
 
+type SelectedChordMemo = {
+  sectionLabel: string;
+  chord: string;
+  index: number;
+  degree: string;
+  functionName: string;
+  relation: string;
+  note: string;
+};
+
 const lyricSketch = [
   {
     label: "Intro",
@@ -62,6 +72,77 @@ const demoProgressions: AnalysisResult[] = [
     ],
   },
 ];
+
+const chordMemos: Record<string, Omit<SelectedChordMemo, "sectionLabel" | "chord" | "index">> = {
+  Cmaj7: {
+    degree: "Imaj7",
+    functionName: "Tonic",
+    relation: "G/Bへ滑らかに低音だけが下がり、冒頭の落ち着きを保ちます。",
+    note: "明るい中心。メロディを広げず、余白を残すとノートらしい静けさが出ます。",
+  },
+  "G/B": {
+    degree: "V/3rd",
+    functionName: "Passing dominant",
+    relation: "Cmaj7とAm7の間をつなぐ経過和音として働きます。",
+    note: "ベースが半音ではなく順に動くので、場面転換を大きくしすぎません。",
+  },
+  Am7: {
+    degree: "vi7",
+    functionName: "Relative minor",
+    relation: "前後の明るいコードに少し影を足し、歌詞の余韻を置けます。",
+    note: "言葉を詰めず、語尾を少し伸ばす場所として扱いやすいコードです。",
+  },
+  Fmaj7: {
+    degree: "IVmaj7",
+    functionName: "Subdominant",
+    relation: "次の展開へ空気を開き、Chorusでは入口の支えになります。",
+    note: "コード感は強いけれど押しつけすぎない、メモ欄向きの柔らかい支点です。",
+  },
+  Dm7: {
+    degree: "ii7",
+    functionName: "Pre-dominant",
+    relation: "G7へ向かう準備として、Verseの話し始めを整えます。",
+    note: "次に進む力を少しだけ持たせたい小節に置くと自然です。",
+  },
+  G7: {
+    degree: "V7",
+    functionName: "Dominant",
+    relation: "Em7またはCへ戻るための緊張を作ります。",
+    note: "強く解決させず、少し濁りを残すと都会的な静けさに寄ります。",
+  },
+  Em7: {
+    degree: "iii7",
+    functionName: "Mediant",
+    relation: "G7の後に着地しすぎず、Am7へ自然に視線を移します。",
+    note: "主役ではなく、色味を変える薄いレイヤーとして使いやすいコードです。",
+  },
+  G: {
+    degree: "V",
+    functionName: "Dominant",
+    relation: "Fmaj7からCへ戻すための短い橋になります。",
+    note: "強いサビ感を出したくない時は、音数を減らして軽く鳴らすのが合います。",
+  },
+  C: {
+    degree: "I",
+    functionName: "Tonic",
+    relation: "Gから戻って、Am7へ少しだけ表情を落とします。",
+    note: "結論に見せつつ、次の小節へ余白を残せる安定点です。",
+  },
+};
+
+function getChordMemo(chord: string): Omit<SelectedChordMemo, "sectionLabel" | "chord" | "index"> {
+  const normalizedChord = chord.replace(/m(aj)?7?|7|\/.*|\#|b/g, "");
+
+  return (
+    chordMemos[chord] ??
+    {
+      degree: normalizedChord ? `${normalizedChord} area` : "N/A",
+      functionName: "Color chord",
+      relation: "前後のコードとの距離を見ながら、雰囲気を変えるための小節として扱います。",
+      note: "MVPのダミー解析なので、実装時にはここを実解析結果に差し替えます。",
+    }
+  );
+}
 
 function extractYouTubeVideoId(input: string): string | null {
   const value = input.trim();
@@ -131,7 +212,7 @@ export default function Home() {
   const [metaStatus, setMetaStatus] = useState<"idle" | "loading" | "failed">("idle");
   const [audioFile, setAudioFile] = useState<File | null>(null);
   const [analysis, setAnalysis] = useState<AnalysisResult | null>(null);
-  const [theme, setTheme] = useState<"light" | "dark">("light");
+  const [theme, setTheme] = useState<"light" | "dark">("dark");
   const [selectedChord, setSelectedChord] = useState<string | null>(null);
   const [outputMode, setOutputMode] = useState<OutputMode>("chords");
   const [midiStatus, setMidiStatus] = useState<"idle" | "saved">("idle");
@@ -139,6 +220,27 @@ export default function Home() {
   const videoId = useMemo(() => extractYouTubeVideoId(youtubeUrl), [youtubeUrl]);
   const thumbnailUrl = videoId ? `https://img.youtube.com/vi/${videoId}/hqdefault.jpg` : null;
   const embedUrl = videoId ? `https://www.youtube.com/embed/${videoId}` : null;
+  const selectedMemo = useMemo<SelectedChordMemo | null>(() => {
+    if (!analysis || !selectedChord) {
+      return null;
+    }
+
+    for (const section of analysis.sections) {
+      const index = section.chords.findIndex((chord, chordIndex) => selectedChord === `${section.label}-${chord}-${chordIndex}`);
+
+      if (index >= 0) {
+        const chord = section.chords[index];
+        return {
+          sectionLabel: section.label,
+          chord,
+          index,
+          ...getChordMemo(chord),
+        };
+      }
+    }
+
+    return null;
+  }, [analysis, selectedChord]);
 
   async function handleVideoSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -210,8 +312,8 @@ export default function Home() {
 
       <section className="hero">
         <div className="hero-copy">
-          <p className="eyebrow">Chord Progression MVP</p>
-          <h1>YouTube動画と音源ファイルからコード進行の下書きを作る</h1>
+          <p className="eyebrow">Urban Dark Chord Notebook</p>
+          <h1>コード進行の下書きを、静かな制作ノートに整える</h1>
           <p className="lead">
             YouTube URLを入れると動画情報をプレビューします。音源ファイルを選んで解析すると、MVP用のダミーコード進行を表示します。
           </p>
@@ -281,7 +383,7 @@ export default function Home() {
             <span className="step">2</span>
             <div>
               <h2>抽出する出力</h2>
-              <p>音源ファイルを選び、コード進行またはMIDIを抽出</p>
+              <p>音源ファイルを選び、コード進行メモまたはMIDIを書き出し</p>
             </div>
           </div>
 
@@ -350,25 +452,48 @@ export default function Home() {
 
                 <div className="section-list" aria-label="コード進行">
                   <h3>コード進行</h3>
-                {analysis.sections.map((section) => (
-                  <div className="chord-section" key={section.label}>
-                    <h3>{section.label}</h3>
-                    <div className="chords">
-                      {section.chords.map((chord, index) => (
-                        <button
-                          className={selectedChord === `${section.label}-${chord}-${index}` ? "chord-card selected" : "chord-card"}
-                          key={`${section.label}-${chord}-${index}`}
-                          type="button"
-                          onClick={() => setSelectedChord(`${section.label}-${chord}-${index}`)}
-                        >
-                          {chord}
-                        </button>
-                      ))}
+                  {analysis.sections.map((section) => (
+                    <div className="chord-section" key={section.label}>
+                      <h3>{section.label}</h3>
+                      <div className="chords">
+                        {section.chords.map((chord, index) => (
+                          <button
+                            className={
+                              selectedChord === `${section.label}-${chord}-${index}` ? "chord-card selected" : "chord-card"
+                            }
+                            key={`${section.label}-${chord}-${index}`}
+                            type="button"
+                            onClick={() => setSelectedChord(`${section.label}-${chord}-${index}`)}
+                          >
+                            {chord}
+                          </button>
+                        ))}
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  ))}
                 </div>
               </div>
+
+              {selectedMemo && (
+                <aside className="selected-insight reveal" aria-label="選択中コードの分析メモ">
+                  <div className="memo-kicker">{selectedMemo.sectionLabel} / Bar {selectedMemo.index + 1}</div>
+                  <div className="memo-title-row">
+                    <h3>{selectedMemo.chord}</h3>
+                    <span>{selectedMemo.degree}</span>
+                  </div>
+                  <div className="memo-grid">
+                    <div>
+                      <span>Function</span>
+                      <strong>{selectedMemo.functionName}</strong>
+                    </div>
+                    <div>
+                      <span>Relation</span>
+                      <p>{selectedMemo.relation}</p>
+                    </div>
+                  </div>
+                  <p className="memo-note">{selectedMemo.note}</p>
+                </aside>
+              )}
             </div>
           )}
 
