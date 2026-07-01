@@ -9,6 +9,28 @@ pnpm install
 pnpm run dev
 ```
 
+### Local FastAPI backend
+
+GitHub Pagesではバックエンドが動かないため、通常はフロント内のモック解析を使います。
+ローカルでFastAPIバックエンドを試す場合は別ターミナルで起動します。
+
+```bash
+cd backend
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+```
+
+フロントからローカルAPIを呼ぶ場合は、Next.js側を次の環境変数で起動します。
+
+```bash
+NEXT_PUBLIC_API_BASE_URL=http://localhost:8000 NEXT_PUBLIC_ANALYSIS_MODE=api pnpm run dev
+```
+
+バックエンドの `POST /analyze-youtube` は最初はモックのコード進行を返します。
+`USE_REAL_YOUTUBE_AUDIO=true` を付けて起動すると、開発用に `yt-dlp` と `ffmpeg` を使う音声取得・WAV変換の経路へ進みます。
+
 ## Build
 
 ```bash

@@ -44,7 +44,8 @@ type SelectedChordMemo = {
   note: string;
 };
 
-const analysisMode: AnalysisMode = process.env.NEXT_PUBLIC_ANALYSIS_MODE === "api" ? "api" : "mock";
+const apiBaseUrl = (process.env.NEXT_PUBLIC_API_BASE_URL ?? "").replace(/\/$/, "");
+const analysisMode: AnalysisMode = process.env.NEXT_PUBLIC_ANALYSIS_MODE === "api" || apiBaseUrl ? "api" : "mock";
 
 const mockYoutubeChords = [
   { time: 0, chord: "Cmaj7" },
@@ -257,7 +258,8 @@ async function analyzeYoutubeUrl(url: string, outputType: OutputMode): Promise<A
   }
 
   try {
-    const response = await fetch("/api/analyze-youtube", {
+    const apiUrl = apiBaseUrl ? `${apiBaseUrl}/analyze-youtube` : "/api/analyze-youtube";
+    const response = await fetch(apiUrl, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
