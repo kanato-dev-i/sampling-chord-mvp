@@ -17,6 +17,7 @@ type VideoMeta = {
 };
 
 type OutputMode = "chords" | "midi";
+type AnalysisStatus = "idle" | "analyzing" | "success" | "failed";
 
 type SelectedChordMemo = {
   sectionLabel: string;
@@ -181,6 +182,25 @@ function pickDemoResult(fileName: string): AnalysisResult {
   return demoProgressions[charTotal % demoProgressions.length];
 }
 
+async function analyzeYoutubeUrl(url: string, outputType: OutputMode): Promise<AnalysisResult> {
+  // Future replacement point: POST { url, outputType } to /api/analyze-youtube.
+  // const response = await fetch("/api/analyze-youtube", { method: "POST", body: JSON.stringify({ url, outputType }) });
+  await new Promise((resolve) => setTimeout(resolve, 720));
+
+  if (!extractYouTubeVideoId(url)) {
+    throw new Error("Invalid YouTube URL");
+  }
+
+  return {
+    key: "C major",
+    bpm: outputType === "midi" ? 100 : 96,
+    sections: [
+      { label: "Main motif", chords: ["Cmaj7", "Am7", "Dm7", "G7"] },
+      { label: "Turnaround", chords: ["Em7", "Am7", "Fmaj7", "G"] },
+    ],
+  };
+}
+
 function makeDummyMidiBytes(): Uint8Array {
   return new Uint8Array([
     0x4d, 0x54, 0x68, 0x64, 0x00, 0x00, 0x00, 0x06, 0x00, 0x00, 0x00, 0x01, 0x01, 0xe0, 0x4d, 0x54,
@@ -212,10 +232,12 @@ export default function Home() {
   const [metaStatus, setMetaStatus] = useState<"idle" | "loading" | "failed">("idle");
   const [audioFile, setAudioFile] = useState<File | null>(null);
   const [analysis, setAnalysis] = useState<AnalysisResult | null>(null);
+  const [analysisStatus, setAnalysisStatus] = useState<AnalysisStatus>("idle");
   const [theme, setTheme] = useState<"light" | "dark">("dark");
   const [selectedChord, setSelectedChord] = useState<string | null>(null);
   const [outputMode, setOutputMode] = useState<OutputMode>("chords");
   const [midiStatus, setMidiStatus] = useState<"idle" | "saved">("idle");
+  const [analysisMessage, setAnalysisMessage] = useState("YouTube URLを入力して解析を開始できます。");
 
   const videoId = useMemo(() => extractYouTubeVideoId(youtubeUrl), [youtubeUrl]);
   const thumbnailUrl = videoId ? `https://img.youtube.com/vi/${videoId}/hqdefault.jpg` : null;
@@ -242,8 +264,7 @@ export default function Home() {
     return null;
   }, [analysis, selectedChord]);
 
-  async function handleVideoSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
+  async function fetchVideoMeta() {
     setVideoMeta(null);
 
     if (!videoId) {
@@ -276,15 +297,49 @@ export default function Home() {
     }
   }
 
+  async function handleAnalyzeYoutube(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    if (!videoId) {
+      setAnalysisStatus("failed");
+      setAnalysisMessage("有効なYouTube URLを入力してください。");
+      return;
+    }
+
+    setAnalysis(null);
+    setSelectedChord(null);
+    setMidiStatus("idle");
+    setAnalysisStatus("analyzing");
+    setAnalysisMessage("YouTube URLを解析キューに送信する想定で、モック解析を実行中です。");
+    void fetchVideoMeta();
+
+    try {
+      const nextAnalysis = await analyzeYoutubeUrl(youtubeUrl, outputMode);
+      setAnalysis(nextAnalysis);
+      setSelectedChord(`${nextAnalysis.sections[0].label}-${nextAnalysis.sections[0].chords[0]}-0`);
+      setAnalysisStatus("success");
+      setAnalysisMessage(
+        outputMode === "midi"
+          ? "コード進行の解析が完了しました。必要に応じてMIDIを書き出せます。"
+          : "コード進行の解析が完了しました。下の制作ノートで確認できます。",
+      );
+    } catch {
+      setAnalysisStatus("failed");
+      setAnalysisMessage("解析に失敗しました。URLの形式を確認してください。");
+    }
+  }
+
   function handleAudioFileChange(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0] ?? null;
     setAudioFile(file);
     setAnalysis(null);
     setSelectedChord(null);
+    setAnalysisStatus("idle");
+    setAnalysisMessage(file ? "補助入力の音源ファイルが選択されました。URL解析と同じ結果欄で確認できます。" : "YouTube URLを入力して解析を開始できます。");
     setMidiStatus("idle");
   }
 
-  function handleExtract() {
+  function handleAnalyzeFile() {
     if (!audioFile) {
       return;
     }
@@ -292,11 +347,18 @@ export default function Home() {
     const nextAnalysis = pickDemoResult(audioFile.name);
     setAnalysis(nextAnalysis);
     setSelectedChord(`${nextAnalysis.sections[0].label}-${nextAnalysis.sections[0].chords[0]}-0`);
+    setAnalysisStatus("success");
+    setAnalysisMessage("補助入力の音源ファイルから、MVP用のダミー解析結果を表示しています。");
+    setMidiStatus("idle");
+  }
 
-    if (outputMode === "midi") {
-      downloadDummyMidi(audioFile.name);
-      setMidiStatus("saved");
+  function handleMidiExport() {
+    if (!analysis) {
+      return;
     }
+
+    downloadDummyMidi(audioFile?.name ?? videoMeta?.title ?? "youtube-chord-analysis");
+    setMidiStatus("saved");
   }
 
   return (
@@ -313,25 +375,25 @@ export default function Home() {
       <section className="hero">
         <div className="hero-copy">
           <p className="eyebrow">Urban Dark Chord Notebook</p>
-          <h1>コード進行の下書きを、静かな制作ノートに整える</h1>
+          <h1>YouTubeの音源からコード進行の下書きを作る</h1>
           <p className="lead">
-            YouTube URLを入れると動画情報をプレビューします。音源ファイルを選んで解析すると、MVP用のダミーコード進行を表示します。
+            YouTube URLを貼って解析すると、コード進行メモを作成し、必要に応じてMIDIを書き出せる想定のMVPです。
           </p>
         </div>
       </section>
 
       <section className="workspace" aria-label="コード進行推定ワークスペース">
-        <div className="panel reveal">
+        <div className="panel workflow-panel reveal">
           <div className="panel-heading">
             <span className="step">1</span>
             <div>
-              <h2>YouTube URL</h2>
-              <p>watch、shorts、embed、youtu.be形式に対応</p>
+              <h2>YouTube URLから解析</h2>
+              <p>URLを主な入力ソースにして、コード進行またはMIDI用の解析を開始</p>
             </div>
           </div>
 
-          <form className="url-form" onSubmit={handleVideoSubmit}>
-            <label htmlFor="youtube-url">URL</label>
+          <form className="url-form" onSubmit={handleAnalyzeYoutube}>
+            <label htmlFor="youtube-url">YouTube URL</label>
             <div className="input-row">
               <input
                 id="youtube-url"
@@ -341,16 +403,53 @@ export default function Home() {
                   setYoutubeUrl(event.target.value);
                   setVideoMeta(null);
                   setMetaStatus("idle");
+                  setAnalysis(null);
+                  setSelectedChord(null);
+                  setAnalysisStatus("idle");
+                  setMidiStatus("idle");
+                  setAnalysisMessage("YouTube URLを入力して解析を開始できます。");
                 }}
                 placeholder="https://www.youtube.com/watch?v=..."
               />
-              <button type="submit">表示</button>
+              <button type="submit" disabled={!videoId || analysisStatus === "analyzing"}>
+                {analysisStatus === "analyzing" ? "解析中" : "解析する"}
+              </button>
             </div>
             {youtubeUrl && (
               <p className={videoId ? "status success" : "status error"}>
                 {videoId ? `videoId: ${videoId}` : "有効なYouTube URLを入力してください"}
               </p>
             )}
+
+            <div className="output-picker primary-output" aria-label="出力形式">
+              <button
+                className={outputMode === "chords" ? "output-option active" : "output-option"}
+                type="button"
+                onClick={() => {
+                  setOutputMode("chords");
+                  setMidiStatus("idle");
+                }}
+              >
+                <strong>コード進行</strong>
+                <span>制作ノート上で確認</span>
+              </button>
+              <button
+                className={outputMode === "midi" ? "output-option active" : "output-option"}
+                type="button"
+                onClick={() => {
+                  setOutputMode("midi");
+                  setMidiStatus("idle");
+                }}
+              >
+                <strong>MIDI</strong>
+                <span>解析後に.midを書き出し</span>
+              </button>
+            </div>
+
+            <div className={`analysis-state ${analysisStatus}`} role="status" aria-live="polite">
+              <span>{analysisStatus === "analyzing" ? "Analyzing" : analysisStatus === "success" ? "Ready" : analysisStatus === "failed" ? "Check URL" : "Standby"}</span>
+              <p>{analysisMessage}</p>
+            </div>
           </form>
 
           {videoId && thumbnailUrl && embedUrl && (
@@ -365,7 +464,7 @@ export default function Home() {
                       ? `Channel: ${videoMeta.authorName}`
                       : metaStatus === "failed"
                         ? "タイトル取得に失敗したためフォールバック表示です"
-                        : "表示ボタンでタイトルを取得します"}
+                        : "解析ボタンでタイトルも確認します"}
                 </p>
               </div>
               <iframe
@@ -376,55 +475,45 @@ export default function Home() {
               />
             </div>
           )}
+
+          <div className="supplemental-input">
+            <div>
+              <h3>補助入力</h3>
+              <p>YouTube解析APIが未実装の間、手元の音源ファイルでもダミー結果を確認できます。</p>
+            </div>
+            <div className="upload-box">
+              <label htmlFor="audio-file">音源ファイル</label>
+              <input id="audio-file" type="file" accept="audio/*" onChange={handleAudioFileChange} />
+              {audioFile && (
+                <div className="file-summary">
+                  <strong>{audioFile.name}</strong>
+                  <span>{(audioFile.size / 1024 / 1024).toFixed(2)} MB</span>
+                </div>
+              )}
+              <button className="secondary-button" type="button" onClick={handleAnalyzeFile} disabled={!audioFile}>
+                補助ファイルでダミー解析
+              </button>
+            </div>
+          </div>
         </div>
 
-        <div className="panel reveal delay">
+        <div className="panel result-panel reveal delay">
           <div className="panel-heading">
             <span className="step">2</span>
             <div>
-              <h2>抽出する出力</h2>
-              <p>音源ファイルを選び、コード進行メモまたはMIDIを書き出し</p>
+              <h2>解析結果</h2>
+              <p>コード進行を確認し、解析後にMIDIを書き出し</p>
             </div>
           </div>
 
-          <div className="upload-box">
-            <label htmlFor="audio-file">音源ファイル</label>
-            <input id="audio-file" type="file" accept="audio/*" onChange={handleAudioFileChange} />
-            {audioFile && (
-              <div className="file-summary">
-                <strong>{audioFile.name}</strong>
-                <span>{(audioFile.size / 1024 / 1024).toFixed(2)} MB</span>
-              </div>
-            )}
-
-            <div className="output-picker" aria-label="抽出する出力">
-              <button
-                className={outputMode === "chords" ? "output-option active" : "output-option"}
-                type="button"
-                onClick={() => {
-                  setOutputMode("chords");
-                  setMidiStatus("idle");
-                }}
-              >
-                <strong>コード進行</strong>
-                <span>歌詞メモと並べて表示</span>
-              </button>
-              <button
-                className={outputMode === "midi" ? "output-option active" : "output-option"}
-                type="button"
-                onClick={() => setOutputMode("midi")}
-              >
-                <strong>MIDI</strong>
-                <span>ダミー.midを保存</span>
-              </button>
+          {!analysis && (
+            <div className="empty-result">
+              <h3>まだ解析結果はありません</h3>
+              <p>YouTube URLを貼って「解析する」を押すと、ここにコード進行のダミー結果が表示されます。</p>
             </div>
+          )}
 
-            <button className="analyze-button" type="button" onClick={handleExtract} disabled={!audioFile}>
-              {outputMode === "chords" ? "コード進行を抽出する" : "MIDIを抽出して保存する"}
-            </button>
-          </div>
-
-          {analysis && outputMode === "chords" && (
+          {analysis && (
             <div className="analysis-result reveal">
               <div className="result-summary">
                 <div>
@@ -494,16 +583,17 @@ export default function Home() {
                   <p className="memo-note">{selectedMemo.note}</p>
                 </aside>
               )}
-            </div>
-          )}
 
-          {outputMode === "midi" && (
-            <div className="midi-export-panel reveal">
-              <h3>MIDI書き出し</h3>
-              <p>
-                「MIDIを抽出して保存する」を押すと、MVP用の短いダミーMIDIファイルを保存します。実際の解析やYouTube音声取得は行いません。
-              </p>
-              {midiStatus === "saved" && <p className="status success">ダミーMIDIの保存を開始しました。</p>}
+              <div className="midi-export-panel compact">
+                <div>
+                  <h3>MIDI Export</h3>
+                  <p>解析結果がある時だけ、MVP用のダミーMIDIを書き出せます。</p>
+                </div>
+                <button className="midi-button" type="button" onClick={handleMidiExport} disabled={!analysis}>
+                  MIDIを書き出す
+                </button>
+                {midiStatus === "saved" && <p className="status success">ダミーMIDIの保存を開始しました。</p>}
+              </div>
             </div>
           )}
         </div>
