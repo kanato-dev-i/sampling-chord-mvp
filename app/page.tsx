@@ -5,6 +5,10 @@ import { ChangeEvent, FormEvent, useMemo, useState } from "react";
 type AnalysisResult = {
   key: string;
   bpm: number;
+  timeline: {
+    time: number;
+    chord: string;
+  }[];
   sections: {
     label: string;
     chords: string[];
@@ -18,6 +22,7 @@ type VideoMeta = {
 
 type OutputMode = "chords" | "midi";
 type AnalysisStatus = "idle" | "analyzing" | "success" | "failed";
+type AnalysisMode = "mock" | "api";
 
 type AnalyzeYoutubeApiResponse = {
   source: "youtube";
@@ -39,6 +44,15 @@ type SelectedChordMemo = {
   note: string;
 };
 
+const analysisMode: AnalysisMode = process.env.NEXT_PUBLIC_ANALYSIS_MODE === "api" ? "api" : "mock";
+
+const mockYoutubeChords = [
+  { time: 0, chord: "Cmaj7" },
+  { time: 4, chord: "Am7" },
+  { time: 8, chord: "Dm7" },
+  { time: 12, chord: "G7" },
+];
+
 const lyricSketch = [
   {
     label: "Intro",
@@ -58,6 +72,7 @@ const demoProgressions: AnalysisResult[] = [
   {
     key: "C major",
     bpm: 96,
+    timeline: mockYoutubeChords,
     sections: [
       { label: "Intro", chords: ["Cmaj7", "G/B", "Am7", "Fmaj7"] },
       { label: "Verse", chords: ["Dm7", "G7", "Em7", "Am7"] },
@@ -67,6 +82,12 @@ const demoProgressions: AnalysisResult[] = [
   {
     key: "A minor",
     bpm: 112,
+    timeline: [
+      { time: 0, chord: "Am" },
+      { time: 4, chord: "F" },
+      { time: 8, chord: "C" },
+      { time: 12, chord: "G" },
+    ],
     sections: [
       { label: "Intro", chords: ["Am", "F", "C", "G"] },
       { label: "Verse", chords: ["Dm", "Am", "E7", "Am"] },
@@ -76,6 +97,12 @@ const demoProgressions: AnalysisResult[] = [
   {
     key: "E major",
     bpm: 128,
+    timeline: [
+      { time: 0, chord: "E" },
+      { time: 4, chord: "B" },
+      { time: 8, chord: "C#m" },
+      { time: 12, chord: "A" },
+    ],
     sections: [
       { label: "Intro", chords: ["E", "B", "C#m", "A"] },
       { label: "Verse", chords: ["F#m7", "B7", "Emaj7", "C#m7"] },
@@ -192,9 +219,41 @@ function pickDemoResult(fileName: string): AnalysisResult {
   return demoProgressions[charTotal % demoProgressions.length];
 }
 
+function apiResponseToAnalysisResult(data: AnalyzeYoutubeApiResponse, outputType: OutputMode): AnalysisResult {
+  return {
+    key: "C major",
+    bpm: outputType === "midi" ? 100 : 96,
+    timeline: data.chords,
+    sections: [
+      {
+        label: "YouTube analysis",
+        chords: data.chords.map((item) => item.chord),
+      },
+    ],
+  };
+}
+
+async function mockAnalyzeYoutubeUrl(_url: string, outputType: OutputMode): Promise<AnalysisResult> {
+  await new Promise((resolve) => setTimeout(resolve, 720));
+
+  return {
+    key: "C major",
+    bpm: outputType === "midi" ? 100 : 96,
+    timeline: mockYoutubeChords,
+    sections: [
+      { label: "YouTube mock", chords: mockYoutubeChords.map((item) => item.chord) },
+      { label: "Turnaround", chords: ["Em7", "Am7", "Fmaj7", "G"] },
+    ],
+  };
+}
+
 async function analyzeYoutubeUrl(url: string, outputType: OutputMode): Promise<AnalysisResult> {
   if (!extractYouTubeVideoId(url)) {
     throw new Error("Invalid YouTube URL");
+  }
+
+  if (analysisMode === "mock") {
+    return mockAnalyzeYoutubeUrl(url, outputType);
   }
 
   try {
@@ -208,57 +267,13 @@ async function analyzeYoutubeUrl(url: string, outputType: OutputMode): Promise<A
 
     if (response.ok) {
       const data = (await response.json()) as AnalyzeYoutubeApiResponse;
-
-      return {
-        key: "C major",
-        bpm: outputType === "midi" ? 100 : 96,
-        sections: [
-          {
-            label: "YouTube analysis",
-            chords: data.chords.map((item) => item.chord),
-          },
-        ],
-      };
+      return apiResponseToAnalysisResult(data, outputType);
     }
   } catch {
-    // GitHub Pages has no runtime API. Keep the MVP usable with a local mock.
+    // Keep local experiments resilient if an API server is temporarily unavailable.
   }
 
-  await new Promise((resolve) => setTimeout(resolve, 720));
-
-  return {
-    key: "C major",
-    bpm: outputType === "midi" ? 100 : 96,
-    sections: [
-      { label: "Main motif", chords: ["Cmaj7", "Am7", "Dm7", "G7"] },
-      { label: "Turnaround", chords: ["Em7", "Am7", "Fmaj7", "G"] },
-    ],
-  };
-}
-
-function makeDummyMidiBytes(): Uint8Array {
-  return new Uint8Array([
-    0x4d, 0x54, 0x68, 0x64, 0x00, 0x00, 0x00, 0x06, 0x00, 0x00, 0x00, 0x01, 0x01, 0xe0, 0x4d, 0x54,
-    0x72, 0x6b, 0x00, 0x00, 0x00, 0x2b, 0x00, 0xff, 0x03, 0x0f, 0x43, 0x68, 0x6f, 0x72, 0x64, 0x20,
-    0x4d, 0x56, 0x50, 0x20, 0x44, 0x65, 0x6d, 0x6f, 0x00, 0xc0, 0x00, 0x00, 0x90, 0x3c, 0x50, 0x00,
-    0x90, 0x40, 0x48, 0x00, 0x90, 0x43, 0x48, 0x83, 0x60, 0x80, 0x3c, 0x40, 0x00, 0x80, 0x40, 0x40,
-    0x00, 0x80, 0x43, 0x40, 0x00, 0xff, 0x2f, 0x00,
-  ]);
-}
-
-function downloadDummyMidi(fileName: string) {
-  const midiBytes = makeDummyMidiBytes();
-  const midiBuffer = new ArrayBuffer(midiBytes.byteLength);
-  new Uint8Array(midiBuffer).set(midiBytes);
-  const blob = new Blob([midiBuffer], { type: "audio/midi" });
-  const url = URL.createObjectURL(blob);
-  const anchor = document.createElement("a");
-  anchor.href = url;
-  anchor.download = `${fileName.replace(/\.[^/.]+$/, "") || "chord-progression"}-demo.mid`;
-  document.body.append(anchor);
-  anchor.click();
-  anchor.remove();
-  URL.revokeObjectURL(url);
+  return mockAnalyzeYoutubeUrl(url, outputType);
 }
 
 export default function Home() {
@@ -271,7 +286,7 @@ export default function Home() {
   const [theme, setTheme] = useState<"light" | "dark">("dark");
   const [selectedChord, setSelectedChord] = useState<string | null>(null);
   const [outputMode, setOutputMode] = useState<OutputMode>("chords");
-  const [midiStatus, setMidiStatus] = useState<"idle" | "saved">("idle");
+  const [midiStatus, setMidiStatus] = useState<"idle" | "unavailable">("idle");
   const [analysisMessage, setAnalysisMessage] = useState("YouTube URLを入力して解析を開始できます。");
 
   const videoId = useMemo(() => extractYouTubeVideoId(youtubeUrl), [youtubeUrl]);
@@ -345,7 +360,11 @@ export default function Home() {
     setSelectedChord(null);
     setMidiStatus("idle");
     setAnalysisStatus("analyzing");
-    setAnalysisMessage("YouTube URLを解析キューに送信する想定で、モック解析を実行中です。");
+    setAnalysisMessage(
+      analysisMode === "api"
+        ? "YouTube URLを /api/analyze-youtube に送信して解析中です。"
+        : "GitHub Pages向けのフロント内モック解析を実行中です。",
+    );
     void fetchVideoMeta();
 
     try {
@@ -355,7 +374,7 @@ export default function Home() {
       setAnalysisStatus("success");
       setAnalysisMessage(
         outputMode === "midi"
-          ? "コード進行の解析が完了しました。必要に応じてMIDIを書き出せます。"
+          ? "コード進行の解析が完了しました。MIDI生成はバックエンド実装後に有効化されます。"
           : "コード進行の解析が完了しました。下の制作ノートで確認できます。",
       );
     } catch {
@@ -392,8 +411,7 @@ export default function Home() {
       return;
     }
 
-    downloadDummyMidi(audioFile?.name ?? videoMeta?.title ?? "youtube-chord-analysis");
-    setMidiStatus("saved");
+    setMidiStatus("unavailable");
   }
 
   return (
@@ -477,7 +495,7 @@ export default function Home() {
                 }}
               >
                 <strong>MIDI</strong>
-                <span>解析後に.midを書き出し</span>
+                <span>バックエンド実装後に有効化</span>
               </button>
             </div>
 
@@ -561,6 +579,15 @@ export default function Home() {
                 </div>
               </div>
 
+              <div className="progression-strip" aria-label="コード進行サマリー">
+                {analysis.timeline.map((item, index) => (
+                  <span key={`${item.time}-${item.chord}`}>
+                    {item.chord}
+                    {index < analysis.timeline.length - 1 && <small>-</small>}
+                  </span>
+                ))}
+              </div>
+
               <div className="parallel-note">
                 <div className="lyrics-column" aria-label="歌詞メモ">
                   <h3>歌詞メモ</h3>
@@ -576,6 +603,14 @@ export default function Home() {
 
                 <div className="section-list" aria-label="コード進行">
                   <h3>コード進行</h3>
+                  <div className="timeline-list" aria-label="時間付きコードリスト">
+                    {analysis.timeline.map((item) => (
+                      <div className="timeline-item" key={`${item.time}-${item.chord}`}>
+                        <span>{item.time}s</span>
+                        <strong>{item.chord}</strong>
+                      </div>
+                    ))}
+                  </div>
                   {analysis.sections.map((section) => (
                     <div className="chord-section" key={section.label}>
                       <h3>{section.label}</h3>
@@ -627,7 +662,9 @@ export default function Home() {
                 <button className="midi-button" type="button" onClick={handleMidiExport} disabled={!analysis}>
                   MIDIを書き出す
                 </button>
-                {midiStatus === "saved" && <p className="status success">ダミーMIDIの保存を開始しました。</p>}
+                {midiStatus === "unavailable" && (
+                  <p className="status success">MIDI生成はバックエンド実装後に有効化されます。</p>
+                )}
               </div>
             </div>
           )}
