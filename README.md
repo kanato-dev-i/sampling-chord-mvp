@@ -1,6 +1,20 @@
-# YouTube Chord Progression MVP
+# Sampling Chord MVP
 
-YouTube URLのプレビューと、音源ファイルからのダミーコード進行/MIDI抽出を試すNext.js MVPです。
+GitHub Pagesで動く、静的なコード進行作曲ノートMVPです。
+
+YouTube URLはコード進行の下書きを作る入口として使いますが、YouTube音声の取得・ダウンロードは行いません。コードを手で編集し、キーに基づくディグリー分析を見ながら、現在のコード進行をMIDIとして書き出せます。
+
+## Features
+
+- YouTube URLのvideoId抽出とプレビュー
+- ブラウザ内モック解析によるコード進行下書き
+- コード名の編集、追加、削除、並べ替え
+- Key / Scale / BPM / 1コードの長さ / MIDI音域の設定
+- ディグリー、機能分類、前後関係、セカンダリドミナント候補の表示
+- `progression-note.mid` のMIDI書き出し
+- コード進行とディグリー表記のコピー
+- localStorageによる編集内容、設定、テーマ保存
+- Urban Darkをデフォルトにしたライト/ダーク切り替え
 
 ## Local
 
@@ -9,10 +23,10 @@ pnpm install
 pnpm run dev
 ```
 
-### Local FastAPI backend
+### Optional local FastAPI mock
 
-GitHub Pagesではバックエンドが動かないため、通常はフロント内のモック解析を使います。
-ローカルでFastAPIバックエンドを試す場合は別ターミナルで起動します。
+GitHub Pagesではバックエンドが動かないため、アプリ本体はフロント内のモック解析を使います。
+`backend/` は将来のAPI形状を試すためのローカルモックです。YouTube音声の取得は行いません。
 
 ```bash
 cd backend
@@ -22,14 +36,7 @@ pip install -r requirements.txt
 uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
-フロントからローカルAPIを呼ぶ場合は、Next.js側を次の環境変数で起動します。
-
-```bash
-NEXT_PUBLIC_API_BASE_URL=http://localhost:8000 NEXT_PUBLIC_ANALYSIS_MODE=api pnpm run dev
-```
-
-バックエンドの `POST /analyze-youtube` は最初はモックのコード進行を返します。
-`USE_REAL_YOUTUBE_AUDIO=true` を付けて起動すると、開発用に `yt-dlp` と `ffmpeg` を使う音声取得・WAV変換の経路へ進みます。
+バックエンドの `POST /analyze-youtube` はモックのコード進行を返します。
 
 ## Build
 

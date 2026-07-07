@@ -1,6 +1,8 @@
 # Sampling Chord MVP Backend
 
-FastAPI backend for local YouTube chord analysis experiments.
+FastAPI backend mock for local API-shape experiments.
+
+The current product goal is a GitHub Pages compatible static app. This backend is not required for the deployed MVP and does not download YouTube audio.
 
 ## Setup
 
@@ -25,19 +27,13 @@ curl -X POST http://localhost:8000/analyze-youtube \
   -d '{"url":"https://www.youtube.com/watch?v=dQw4w9WgXcQ","outputType":"chords"}'
 ```
 
-## Modes
+## Behavior
 
-Default mode is mock mode. It returns deterministic dummy chords without downloading YouTube audio.
+`POST /analyze-youtube` keeps the future API shape but returns deterministic dummy chords:
 
-To try the development audio pipeline:
+- No YouTube audio download
+- No ffmpeg conversion
+- No external API key
+- No hosted MIDI file
 
-```bash
-USE_REAL_YOUTUBE_AUDIO=true uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
-```
-
-This requires:
-
-- `yt-dlp` from `requirements.txt`
-- `ffmpeg` installed on the machine
-
-The chord analysis step is still a simple deterministic mock. The current goal is to keep the URL -> audio download -> WAV conversion -> response pipeline ready for a real chord model.
+The static frontend currently performs its main analysis mock in the browser so GitHub Pages can run it without a server.

@@ -1,8 +1,3 @@
-import os
-import shutil
-import subprocess
-import tempfile
-from pathlib import Path
 from typing import Literal, Optional
 from urllib.parse import urlparse
 
@@ -33,7 +28,6 @@ class AnalyzeYoutubeResponse(BaseModel):
 
 class AudioArtifact(BaseModel):
     path: str
-    cleanup_dir: Optional[str] = None
 
 
 MOCK_CHORDS = [
@@ -43,15 +37,7 @@ MOCK_CHORDS = [
     ChordPoint(time=12, chord="G7"),
 ]
 
-USE_REAL_YOUTUBE_AUDIO = os.getenv("USE_REAL_YOUTUBE_AUDIO", "false").lower() == "true"
-ALLOWED_ORIGINS = [
-    origin.strip()
-    for origin in os.getenv(
-        "ALLOWED_ORIGINS",
-        "http://localhost:3000,https://kanato-dev-i.github.io",
-    ).split(",")
-    if origin.strip()
-]
+ALLOWED_ORIGINS = ["http://localhost:3000", "https://kanato-dev-i.github.io"]
 
 app = FastAPI(title="Sampling Chord MVP API")
 
@@ -76,56 +62,14 @@ def validate_youtube_url(url: str) -> str:
 
 
 def fetch_youtube_audio(url: str) -> AudioArtifact:
-    if not USE_REAL_YOUTUBE_AUDIO:
-        return AudioArtifact(path="mock://youtube-audio")
-
-    try:
-        from yt_dlp import YoutubeDL
-    except ImportError as exc:
-        raise HTTPException(status_code=500, detail="yt-dlp is not installed") from exc
-
-    work_dir = Path(tempfile.mkdtemp(prefix="sampling-chord-"))
-    output_template = str(work_dir / "source.%(ext)s")
-    options = {
-        "format": "bestaudio/best",
-        "outtmpl": output_template,
-        "quiet": True,
-        "noplaylist": True,
-    }
-
-    with YoutubeDL(options) as ydl:
-        info = ydl.extract_info(url, download=True)
-        downloaded_path = Path(ydl.prepare_filename(info))
-
-    if not downloaded_path.exists():
-        raise HTTPException(status_code=500, detail="failed to download YouTube audio")
-
-    return AudioArtifact(path=str(downloaded_path), cleanup_dir=str(work_dir))
+    # This MVP intentionally does not download YouTube audio.
+    # Keep the function boundary so a future backend can replace the mock safely.
+    return AudioArtifact(path=f"mock://youtube-audio?source={url}")
 
 
 def convert_audio_to_wav(input_path: str) -> str:
-    if input_path.startswith("mock://"):
-        return "mock://audio.wav"
-
-    ffmpeg_path = shutil.which("ffmpeg")
-    if not ffmpeg_path:
-        raise HTTPException(status_code=500, detail="ffmpeg is not installed")
-
-    source_path = Path(input_path)
-    wav_path = source_path.with_suffix(".wav")
-    command = [
-        ffmpeg_path,
-        "-y",
-        "-i",
-        str(source_path),
-        "-ac",
-        "1",
-        "-ar",
-        "44100",
-        str(wav_path),
-    ]
-    subprocess.run(command, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-    return str(wav_path)
+    # Mock conversion. No ffmpeg process is invoked in the GitHub Pages MVP.
+    return input_path.replace("youtube-audio", "audio.wav")
 
 
 def analyze_chords(_wav_path: str) -> list[ChordPoint]:
@@ -147,14 +91,9 @@ def health() -> dict[str, str]:
 def analyze_youtube(payload: AnalyzeYoutubeRequest) -> AnalyzeYoutubeResponse:
     url = validate_youtube_url(payload.url)
     audio = fetch_youtube_audio(url)
-
-    try:
-        wav_path = convert_audio_to_wav(audio.path)
-        chords = analyze_chords(wav_path)
-        midi_url = generate_midi_from_chords(chords) if payload.outputType == "midi" else None
-    finally:
-        if audio.cleanup_dir:
-            shutil.rmtree(audio.cleanup_dir, ignore_errors=True)
+    wav_path = convert_audio_to_wav(audio.path)
+    chords = analyze_chords(wav_path)
+    midi_url = generate_midi_from_chords(chords) if payload.outputType == "midi" else None
 
     return AnalyzeYoutubeResponse(
         source="youtube",
